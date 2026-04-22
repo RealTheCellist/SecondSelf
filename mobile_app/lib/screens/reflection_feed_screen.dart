@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/checkin.dart';
 import '../utils/reflection_engine.dart';
@@ -36,6 +39,11 @@ class ReflectionFeedScreen extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(child: SecondaryButton(label: '샘플 채우기', onPressed: onSeedData)),
           ],
+        ),
+        const SizedBox(height: 10),
+        SecondaryButton(
+          label: '데이터 내보내기',
+          onPressed: () => _exportDataToClipboard(context, checkins),
         ),
         const SizedBox(height: 10),
         PrimaryButton(
@@ -81,7 +89,11 @@ class ReflectionFeedScreen extends StatelessWidget {
             children: [
               Text('최근의 나는 이렇게 반복되고 있어요', style: textTheme.titleLarge),
               const Spacer(),
-              Chip(label: Text(_stageLabel(summary.stage))),
+              Chip(
+                label: Text(_stageLabel(summary.stage)),
+                backgroundColor: _stageColor(summary.stage).withValues(alpha: 0.2),
+                side: BorderSide(color: _stageColor(summary.stage).withValues(alpha: 0.35)),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -136,13 +148,25 @@ class ReflectionFeedScreen extends StatelessWidget {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: checkins.reversed
-                .map(
-                  (checkin) => Chip(
-                    label: Text('${checkin.createdAt.month}.${checkin.createdAt.day} · ${checkin.emotions.join('/')}'),
-                  ),
-                )
-                .toList(),
+            children: checkins.isEmpty
+                ? [
+                    const Chip(
+                      label: Text('아직 체크인이 없습니다'),
+                      backgroundColor: Color(0xFFF6EFE6),
+                      side: BorderSide(color: Color(0x30311F10)),
+                    ),
+                  ]
+                : checkins.reversed
+                    .map(
+                      (checkin) => Chip(
+                        label: Text(
+                          '${checkin.createdAt.month}.${checkin.createdAt.day} · ${checkin.emotions.join('/')}',
+                        ),
+                        backgroundColor: const Color(0xFFF6EFE6),
+                        side: const BorderSide(color: Color(0x30311F10)),
+                      ),
+                    )
+                    .toList(),
           ),
         ],
       ),
@@ -164,6 +188,21 @@ class ReflectionFeedScreen extends StatelessWidget {
     }
   }
 
+  Color _stageColor(String stage) {
+    switch (stage) {
+      case 'empty':
+        return const Color(0xFF7D6A57);
+      case 'early':
+        return const Color(0xFF8D6A48);
+      case 'preview':
+        return const Color(0xFF9D5F3F);
+      case 'full':
+        return const Color(0xFF6F4A2E);
+      default:
+        return const Color(0xFF74675B);
+    }
+  }
+
   String _stageDescription(String stage) {
     switch (stage) {
       case 'empty':
@@ -177,6 +216,40 @@ class ReflectionFeedScreen extends StatelessWidget {
       default:
         return '';
     }
+  }
+
+  Future<void> _exportDataToClipboard(BuildContext context, List<CheckIn> checkins) async {
+    final payload = {
+      'exportedAt': DateTime.now().toIso8601String(),
+      'checkins': checkins
+          .map(
+            (checkin) => {
+              'id': checkin.id,
+              'promptId': checkin.promptId,
+              'promptLabel': checkin.promptLabel,
+              'text': checkin.text,
+              'emotions': checkin.emotions,
+              'keywords': checkin.keywords,
+              'reflectionLine': checkin.reflectionLine,
+              'createdAt': checkin.createdAt.toIso8601String(),
+            },
+          )
+          .toList(),
+    };
+
+    await Clipboard.setData(
+      ClipboardData(
+        text: const JsonEncoder.withIndent('  ').convert(payload),
+      ),
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('체크인 데이터를 클립보드로 복사했어요'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 }
 
